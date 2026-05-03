@@ -121,16 +121,15 @@ async def get_chat_history():
 @app.post("/adherent/coach-ia/chat", response_model=ChatMessage, status_code=201)
 async def create_chat_message(payload: ChatMessageRequest) -> ChatMessage:
     try:
-        user_message = repository.persist_chat_message("user", payload.content.strip())
+        repository.persist_chat_message("user", payload.content.strip())
         ai_text = await call_ai_gateway(
             message=payload.content.strip(),
             response_mode=payload.response_mode,
             temperature=payload.temperature,
         )
+        assistant_message = repository.persist_chat_message("assistant", ai_text)
     except AIGatewayError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-        assistant_message = repository.persist_chat_message("assistant", ai_text)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
