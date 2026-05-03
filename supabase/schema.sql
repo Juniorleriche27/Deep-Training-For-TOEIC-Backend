@@ -639,3 +639,25 @@ select
   p.weak_zones,
   p.coach_tip
 from app.profiles p;
+
+-- Exposer explicitement le schema app a PostgREST/Supabase REST.
+alter role authenticator set pgrst.db_schemas = 'public, graphql_public, app';
+
+-- Donner les droits de base sur le schema custom.
+grant usage on schema app to anon, authenticated, service_role;
+grant all on all tables in schema app to anon, authenticated, service_role;
+grant all on all routines in schema app to anon, authenticated, service_role;
+grant all on all sequences in schema app to anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema app
+grant all on tables to anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema app
+grant all on routines to anon, authenticated, service_role;
+
+alter default privileges for role postgres in schema app
+grant all on sequences to anon, authenticated, service_role;
+
+-- Forcer PostgREST a recharger la config et le cache de schema.
+notify pgrst, 'reload config';
+notify pgrst, 'reload schema';

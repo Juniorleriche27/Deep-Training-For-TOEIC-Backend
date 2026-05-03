@@ -23,6 +23,10 @@ class Settings(BaseSettings):
 
     supabase_url: str = Field(default="", alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(default="", alias="SUPABASE_SERVICE_ROLE_KEY")
+    default_profile_id: str = Field(
+        default="11111111-1111-1111-1111-111111111111",
+        alias="DEFAULT_PROFILE_ID",
+    )
 
 
 @lru_cache

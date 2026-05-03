@@ -5,11 +5,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.data import ADHERENT_USER, CHAT_HISTORY, COACH_CONTEXT, DASHBOARD_DATA, MESSAGES, NOTES, PROGRAMME, RESOURCES, SCORES
 from app.models import ChatMessage, ChatMessageRequest, HealthResponse, NotePayload, ScoreCreateRequest, SupportMessageRequest
+from app.repositories.adherent_repository import AdherentRepository
 from app.services.ai_gateway import AIGatewayError, call_ai_gateway
 
 settings = get_settings()
+repository = AdherentRepository()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,150 +35,93 @@ async def health() -> HealthResponse:
 
 @app.get("/adherent/me")
 async def get_me():
-    return ADHERENT_USER
+    return repository.get_me()
 
 
 @app.get("/adherent/dashboard")
 async def get_dashboard():
-    return DASHBOARD_DATA
+    return repository.get_dashboard()
 
 
 @app.get("/adherent/programme")
 async def get_programme():
-    return PROGRAMME
+    return repository.get_programme()
 
 
 @app.get("/adherent/scores")
 async def get_scores():
-    return SCORES
+    return repository.get_scores()
 
 
 @app.post("/adherent/scores", status_code=201)
 async def create_score(payload: ScoreCreateRequest):
-    for item in SCORES["history"]:
-        item["isCurrent"] = False
-
-    row = {
-        "date": datetime.now(tz=timezone.utc).date().isoformat(),
-        "listening": payload.listening,
-        "reading": payload.reading,
-        "total": payload.listening + payload.reading,
-        "format": payload.format,
-        "isCurrent": True,
-    }
-    SCORES["history"].append(row)
-    SCORES["current"] = row["total"]
-    SCORES["listening"] = row["listening"]
-    SCORES["reading"] = row["reading"]
-    DASHBOARD_DATA["score"] = row["total"]
-    DASHBOARD_DATA["listening"] = row["listening"]
-    DASHBOARD_DATA["reading"] = row["reading"]
-    return SCORES
+    return repository.create_score(payload.model_dump())
 
 
 @app.get("/adherent/notes")
 async def get_notes():
-    return NOTES
+    return repository.get_notes()
 
 
 @app.post("/adherent/notes", status_code=201)
 async def create_note(payload: NotePayload):
-    note = {
-        "id": f"note-{int(datetime.now(tz=timezone.utc).timestamp() * 1000)}",
-        "title": payload.title or "Nouvelle note",
-        "meta": f"Mise a jour le {datetime.now(tz=timezone.utc).date().isoformat()}",
-        "etape": payload.etape or "",
-        "content": payload.content or "",
-        "words": payload.words or [],
-        "tag": payload.tag,
-    }
-    NOTES.insert(0, note)
-    return note
+    return repository.create_note(payload.model_dump())
 
 
 @app.put("/adherent/notes/{note_id}")
 async def update_note(note_id: str, payload: NotePayload):
-    for note in NOTES:
-        if note["id"] == note_id:
-            if payload.title is not None:
-                note["title"] = payload.title
-            if payload.etape is not None:
-                note["etape"] = payload.etape
-            if payload.content is not None:
-                note["content"] = payload.content
-            if payload.words is not None:
-                note["words"] = payload.words
-            if payload.tag is not None:
-                note["tag"] = payload.tag
-            note["meta"] = f"Mise a jour le {datetime.now(tz=timezone.utc).date().isoformat()}"
-            return note
-    raise HTTPException(status_code=404, detail="Note not found")
+    try:
+        return repository.update_note(note_id, payload.model_dump(exclude_unset=True))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.delete("/adherent/notes/{note_id}", status_code=204)
 async def delete_note(note_id: str):
-    for index, note in enumerate(NOTES):
-        if note["id"] == note_id:
-            NOTES.pop(index)
-            return None
-    raise HTTPException(status_code=404, detail="Note not found")
+    try:
+        repository.delete_note(note_id)
+        return None
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/adherent/ressources")
 async def get_resources():
-    return RESOURCES
+    return repository.get_resources()
 
 
 @app.get("/adherent/messages")
 async def get_messages():
-    return MESSAGES
+    return repository.get_messages()
 
 
 @app.post("/adherent/messages", status_code=201)
 async def create_support_message(payload: SupportMessageRequest):
-    message = {
-        "id": f"msg-{int(datetime.now(tz=timezone.utc).timestamp() * 1000)}",
-        "sender": "Adherent",
-        "senderAvatar": ADHERENT_USER.avatar,
-        "time": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
-        "read": False,
-        "content": payload.content,
-        "borderColor": "#22d3ff",
-    }
-    MESSAGES.insert(0, message)
-    return message
+    return repository.create_message(payload.content)
 
 
 @app.put("/adherent/messages/{message_id}/read")
 async def mark_message_read(message_id: str):
-    for message in MESSAGES:
-        if message["id"] == message_id:
-            message["read"] = True
-            return message
-    raise HTTPException(status_code=404, detail="Message not found")
+    try:
+        return repository.mark_message_read(message_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/adherent/coach-ia/context")
 async def get_coach_context():
-    return COACH_CONTEXT
+    return repository.get_coach_context()
 
 
 @app.get("/adherent/coach-ia/history")
 async def get_chat_history():
-    return CHAT_HISTORY
+    return repository.get_chat_history()
 
 
 @app.post("/adherent/coach-ia/chat", response_model=ChatMessage, status_code=201)
 async def create_chat_message(payload: ChatMessageRequest) -> ChatMessage:
-    user_message = ChatMessage(
-        id=f"user-{int(datetime.now(tz=timezone.utc).timestamp() * 1000)}",
-        role="user",
-        content=payload.content.strip(),
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
-    )
-    CHAT_HISTORY.append(user_message)
-
     try:
+        user_message = repository.persist_chat_message("user", payload.content.strip())
         ai_text = await call_ai_gateway(
             message=payload.content.strip(),
             response_mode=payload.response_mode,
@@ -186,11 +130,8 @@ async def create_chat_message(payload: ChatMessageRequest) -> ChatMessage:
     except AIGatewayError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    assistant_message = ChatMessage(
-        id=f"assistant-{int(datetime.now(tz=timezone.utc).timestamp() * 1000)}",
-        role="assistant",
-        content=ai_text,
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
-    )
-    CHAT_HISTORY.append(assistant_message)
-    return assistant_message
+        assistant_message = repository.persist_chat_message("assistant", ai_text)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return ChatMessage(**assistant_message)
