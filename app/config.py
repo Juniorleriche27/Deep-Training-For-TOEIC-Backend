@@ -27,6 +27,10 @@ class Settings(BaseSettings):
         default="11111111-1111-1111-1111-111111111111",
         alias="DEFAULT_PROFILE_ID",
     )
+    allow_default_profile_fallback: bool = Field(
+        default=True,
+        alias="ALLOW_DEFAULT_PROFILE_FALLBACK",
+    )
 
 
 @lru_cache

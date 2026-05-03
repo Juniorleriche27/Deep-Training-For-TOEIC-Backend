@@ -12,15 +12,14 @@ logger = logging.getLogger("deeptraining.adherent_repository")
 class AdherentRepository:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.profile_id = self.settings.default_profile_id
 
-    def get_me(self) -> dict[str, Any]:
+    def get_me(self, profile_id: str) -> dict[str, Any]:
         def operation():
             row = (
                 get_app_schema_client()
                 .from_("profiles")
                 .select("id, full_name, avatar, current_step, current_step_label, deadline_label")
-                .eq("id", self.profile_id)
+                .eq("id", profile_id)
                 .limit(1)
                 .execute()
             )
@@ -36,13 +35,13 @@ class AdherentRepository:
 
         return self._with_fallback("get_me", operation, ADHERENT_USER.model_dump())
 
-    def get_dashboard(self) -> dict[str, Any]:
+    def get_dashboard(self, profile_id: str) -> dict[str, Any]:
         def operation():
             view_row = (
                 get_app_schema_client()
                 .from_("v_adherent_dashboard")
                 .select("*")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .limit(1)
                 .execute()
             )
@@ -52,7 +51,7 @@ class AdherentRepository:
                 get_app_schema_client()
                 .from_("daily_missions")
                 .select("mission_number, title, subtitle, priority")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("sort_order")
                 .execute()
             ).data or []
@@ -69,7 +68,7 @@ class AdherentRepository:
                 get_app_schema_client()
                 .from_("activity_entries")
                 .select("happened_at, action_label, type_label")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("happened_at", desc=True)
                 .limit(10)
                 .execute()
@@ -118,7 +117,7 @@ class AdherentRepository:
 
         return self._with_fallback("get_dashboard", operation, DASHBOARD_DATA)
 
-    def get_programme(self) -> list[dict[str, Any]]:
+    def get_programme(self, profile_id: str) -> list[dict[str, Any]]:
         def operation():
             steps = (
                 get_app_schema_client()
@@ -156,13 +155,13 @@ class AdherentRepository:
 
         return self._with_fallback("get_programme", operation, PROGRAMME)
 
-    def get_scores(self) -> dict[str, Any]:
+    def get_scores(self, profile_id: str) -> dict[str, Any]:
         def operation():
             profile = (
                 get_app_schema_client()
                 .from_("profiles")
                 .select("current_score, start_score, listening_score, reading_score, target_score, coach_tip")
-                .eq("id", self.profile_id)
+                .eq("id", profile_id)
                 .limit(1)
                 .execute()
             )
@@ -172,7 +171,7 @@ class AdherentRepository:
                 get_app_schema_client()
                 .from_("score_entries")
                 .select("taken_on, listening, reading, total, format_label, is_current")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("taken_on")
                 .execute()
             ).data or []
@@ -180,7 +179,7 @@ class AdherentRepository:
                 get_app_schema_client()
                 .from_("score_analysis")
                 .select("part_label, percent, level_label")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("part_label")
                 .execute()
             ).data or []
@@ -218,15 +217,15 @@ class AdherentRepository:
 
         return self._with_fallback("get_scores", operation, SCORES)
 
-    def create_score(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_score(self, profile_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         def operation():
             schema = get_app_schema_client()
-            schema.from_("score_entries").update({"is_current": False}).eq("profile_id", self.profile_id).execute()
+            schema.from_("score_entries").update({"is_current": False}).eq("profile_id", profile_id).execute()
             inserted = (
                 schema.from_("score_entries")
                 .insert(
                     {
-                        "profile_id": self.profile_id,
+                        "profile_id": profile_id,
                         "taken_on": datetime.now(tz=timezone.utc).date().isoformat(),
                         "listening": payload["listening"],
                         "reading": payload["reading"],
@@ -243,25 +242,25 @@ class AdherentRepository:
                     "listening_score": row["listening"],
                     "reading_score": row["reading"],
                 }
-            ).eq("id", self.profile_id).execute()
+            ).eq("id", profile_id).execute()
             schema.from_("activity_entries").insert(
                 {
-                    "profile_id": self.profile_id,
+                    "profile_id": profile_id,
                     "action_label": "Nouveau score ajoute",
                     "type_label": "Score",
                 }
             ).execute()
-            return self.get_scores()
+            return self.get_scores(profile_id)
 
         return self._with_fallback_write("create_score", operation, self._fallback_create_score(payload))
 
-    def get_notes(self) -> list[dict[str, Any]]:
+    def get_notes(self, profile_id: str) -> list[dict[str, Any]]:
         def operation():
             notes = (
                 get_app_schema_client()
                 .from_("notes")
                 .select("id, title, meta, step_label, content, tag, created_at, updated_at")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("updated_at", desc=True)
                 .execute()
             ).data or []
@@ -290,14 +289,14 @@ class AdherentRepository:
 
         return self._with_fallback("get_notes", operation, NOTES)
 
-    def create_note(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_note(self, profile_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         def operation():
             schema = get_app_schema_client()
             inserted = (
                 schema.from_("notes")
                 .insert(
                     {
-                        "profile_id": self.profile_id,
+                        "profile_id": profile_id,
                         "title": payload.get("title") or "Nouvelle note",
                         "meta": self._note_meta(),
                         "step_label": payload.get("etape") or "",
@@ -317,7 +316,7 @@ class AdherentRepository:
 
         return self._with_fallback_write("create_note", operation, self._fallback_create_note(payload))
 
-    def update_note(self, note_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def update_note(self, profile_id: str, note_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         def operation():
             schema = get_app_schema_client()
             update_payload: dict[str, Any] = {
@@ -335,7 +334,7 @@ class AdherentRepository:
                 schema.from_("notes")
                 .update(update_payload)
                 .eq("id", note_id)
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .execute()
             )
             note = self._single(updated.data, "note")
@@ -355,14 +354,14 @@ class AdherentRepository:
         fallback = self._fallback_update_note(note_id, payload)
         return self._with_fallback_write("update_note", operation, fallback, not_found_message="Note not found")
 
-    def delete_note(self, note_id: str) -> bool:
+    def delete_note(self, profile_id: str, note_id: str) -> bool:
         def operation():
             deleted = (
                 get_app_schema_client()
                 .from_("notes")
                 .delete()
                 .eq("id", note_id)
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .execute()
             )
             if not deleted.data:
@@ -376,7 +375,7 @@ class AdherentRepository:
             not_found_message="Note not found",
         )
 
-    def get_resources(self) -> list[dict[str, Any]]:
+    def get_resources(self, profile_id: str) -> list[dict[str, Any]]:
         def operation():
             resources = (
                 get_app_schema_client()
@@ -412,13 +411,13 @@ class AdherentRepository:
 
         return self._with_fallback("get_resources", operation, RESOURCES)
 
-    def get_messages(self) -> list[dict[str, Any]]:
+    def get_messages(self, profile_id: str) -> list[dict[str, Any]]:
         def operation():
             rows = (
                 get_app_schema_client()
                 .from_("support_messages")
                 .select("id, sender_name, sender_avatar, sent_at, is_read, content, border_color")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("sent_at", desc=True)
                 .execute()
             ).data or []
@@ -437,16 +436,16 @@ class AdherentRepository:
 
         return self._with_fallback("get_messages", operation, MESSAGES)
 
-    def create_message(self, content: str) -> dict[str, Any]:
+    def create_message(self, profile_id: str, content: str) -> dict[str, Any]:
         def operation():
             inserted = (
                 get_app_schema_client()
                 .from_("support_messages")
                 .insert(
                     {
-                        "profile_id": self.profile_id,
+                        "profile_id": profile_id,
                         "sender_name": "Adherent",
-                        "sender_avatar": self.get_me()["avatar"],
+                        "sender_avatar": self.get_me(profile_id)["avatar"],
                         "content": content,
                         "is_read": False,
                         "border_color": "#22d3ff",
@@ -467,14 +466,14 @@ class AdherentRepository:
 
         return self._with_fallback_write("create_message", operation, self._fallback_create_message(content))
 
-    def mark_message_read(self, message_id: str) -> dict[str, Any]:
+    def mark_message_read(self, profile_id: str, message_id: str) -> dict[str, Any]:
         def operation():
             updated = (
                 get_app_schema_client()
                 .from_("support_messages")
                 .update({"is_read": True})
                 .eq("id", message_id)
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .execute()
             )
             row = self._single(updated.data, "support message")
@@ -496,13 +495,13 @@ class AdherentRepository:
             not_found_message="Message not found",
         )
 
-    def get_coach_context(self) -> dict[str, Any]:
+    def get_coach_context(self, profile_id: str) -> dict[str, Any]:
         def operation():
             row = (
                 get_app_schema_client()
                 .from_("profiles")
                 .select("current_step, current_step_label, current_score, target_score, deadline_label, weak_zones")
-                .eq("id", self.profile_id)
+                .eq("id", profile_id)
                 .limit(1)
                 .execute()
             )
@@ -517,13 +516,13 @@ class AdherentRepository:
 
         return self._with_fallback("get_coach_context", operation, COACH_CONTEXT.model_dump())
 
-    def get_chat_history(self) -> list[dict[str, Any]]:
+    def get_chat_history(self, profile_id: str) -> list[dict[str, Any]]:
         def operation():
             rows = (
                 get_app_schema_client()
                 .from_("chat_messages")
                 .select("id, role, content, sent_at")
-                .eq("profile_id", self.profile_id)
+                .eq("profile_id", profile_id)
                 .order("sent_at")
                 .execute()
             ).data or []
@@ -539,14 +538,14 @@ class AdherentRepository:
 
         return self._with_fallback("get_chat_history", operation, [item.model_dump() for item in CHAT_HISTORY])
 
-    def persist_chat_message(self, role: str, content: str) -> dict[str, Any]:
+    def persist_chat_message(self, profile_id: str, role: str, content: str) -> dict[str, Any]:
         try:
             inserted = (
                 get_app_schema_client()
                 .from_("chat_messages")
                 .insert(
                     {
-                        "profile_id": self.profile_id,
+                        "profile_id": profile_id,
                         "role": role,
                         "content": content,
                     }
