@@ -122,8 +122,30 @@ async def get_chat_history():
 async def create_chat_message(payload: ChatMessageRequest) -> ChatMessage:
     try:
         repository.persist_chat_message("user", payload.content.strip())
+        coach_context = repository.get_coach_context()
+        contextual_message = f"""
+Tu es le Coach IA Deep Training TOEIC.
+
+Profil apprenant :
+- Étape actuelle : {coach_context.get("etape")}
+- Score actuel : {coach_context.get("score")}
+- Objectif : {coach_context.get("objectif")}
+- Échéance : {coach_context.get("deadline")}
+- Zones faibles : {coach_context.get("weakZones")}
+
+Consignes :
+- Ne demande pas le profil de l’apprenant : il est fourni ci-dessus.
+- Réponds directement en fonction de ce profil.
+- Donne une priorité claire pour aujourd’hui.
+- Sois concret, court et orienté action TOEIC.
+- Si les zones faibles contiennent Part 3 ou Part 7, priorise ces parties.
+- Ne donne pas une réponse générale.
+
+Question de l’apprenant :
+{payload.content.strip()}
+"""
         ai_text = await call_ai_gateway(
-            message=payload.content.strip(),
+            message=contextual_message,
             response_mode=payload.response_mode,
             temperature=payload.temperature,
         )
