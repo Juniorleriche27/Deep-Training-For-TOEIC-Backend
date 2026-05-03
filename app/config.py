@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
     frontend_origin: str = Field(default="http://localhost:3000", alias="FRONTEND_ORIGIN")
+    frontend_origins: str = Field(
+        default="https://deeptrainingfortoeic.com,https://www.deeptrainingfortoeic.com,http://localhost:3000,http://127.0.0.1:3000",
+        alias="FRONTEND_ORIGINS",
+    )
 
     ai_gateway_base_url: str = Field(default="https://ai.deeptrainingfortoeic.com", alias="AI_GATEWAY_BASE_URL")
     ai_gateway_api_key: str = Field(default="", alias="AI_GATEWAY_API_KEY")
@@ -36,3 +40,11 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_cors_origins() -> list[str]:
+    settings = get_settings()
+    origins = [item.strip() for item in settings.frontend_origins.split(",") if item.strip()]
+    if settings.frontend_origin and settings.frontend_origin not in origins:
+        origins.append(settings.frontend_origin)
+    return origins
