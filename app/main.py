@@ -136,9 +136,21 @@ Profil apprenant :
 Consignes :
 - Ne demande pas le profil de l’apprenant : il est fourni ci-dessus.
 - Réponds directement en fonction de ce profil.
-- Donne une priorité claire pour aujourd’hui.
-- Sois concret, court et orienté action TOEIC.
-- Si les zones faibles contiennent Part 3 ou Part 7, priorise ces parties.
+- Commence obligatoirement par une phrase personnalisée qui cite exactement :
+  l’étape actuelle, le score actuel, l’objectif, l’échéance et les zones faibles.
+- Cette première phrase doit suivre cette structure :
+  "Tu es actuellement en étape ..., avec un score de ..., un objectif de ... et une échéance à .... Tes zones faibles sont ..."
+- Donne ensuite une priorité principale du jour.
+- Puis produis un plan d’action en 3 points exactement, avec cette structure :
+  1. Listening - Part 3 : ...
+  2. Reading - Part 7 : ...
+  3. Mini-test / correction : ...
+- Ne jamais dire que Part 7 est de la compréhension orale.
+- Part 3 correspond à Listening.
+- Part 7 correspond à Reading.
+- Si Part 3 apparaît dans les zones faibles, propose une action Listening concrète sur Part 3.
+- Si Part 7 apparaît dans les zones faibles, propose une action Reading concrète sur Part 7.
+- Réponse courte, concrète, orientée action TOEIC.
 - Ne donne pas une réponse générale.
 
 Question de l’apprenant :
