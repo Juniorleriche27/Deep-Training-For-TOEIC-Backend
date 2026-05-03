@@ -16,6 +16,65 @@ begin
 end;
 $$;
 
+create or replace function app.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, auth, app
+as $$
+begin
+  insert into app.profiles (
+    auth_user_id,
+    role,
+    full_name,
+    avatar,
+    current_step,
+    current_step_label,
+    deadline_label,
+    target_score,
+    start_score,
+    current_score,
+    listening_score,
+    reading_score,
+    regularity_percent,
+    regularity_label,
+    risk_primary,
+    risk_detail,
+    weak_zones,
+    coach_tip,
+    is_active
+  )
+  values (
+    new.id,
+    'adherent',
+    coalesce(
+      nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+      nullif(trim(new.email), ''),
+      'Nouvel utilisateur'
+    ),
+    upper(left(coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), nullif(trim(new.email), ''), 'NU'), 2)),
+    1,
+    'Etape 1',
+    '',
+    785,
+    0,
+    0,
+    0,
+    0,
+    0,
+    '',
+    '',
+    '',
+    '',
+    '',
+    true
+  )
+  on conflict (auth_user_id) do nothing;
+
+  return new;
+end;
+$$;
+
 create table if not exists app.profiles (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid unique,
@@ -356,6 +415,11 @@ with check (
 drop trigger if exists trg_profiles_updated_at on app.profiles;
 create trigger trg_profiles_updated_at before update on app.profiles
 for each row execute function app.set_updated_at();
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function app.handle_new_auth_user();
 
 drop trigger if exists trg_program_steps_updated_at on app.program_steps;
 create trigger trg_program_steps_updated_at before update on app.program_steps
