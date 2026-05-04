@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_cors_origins, get_settings
 from app.dependencies.auth import get_current_profile_id
-from app.models import AdherentProfileInitRequest, ChatMessage, ChatMessageRequest, HealthResponse, NotePayload, ScoreCreateRequest, SupportMessageRequest
+from app.models import AdherentProfileInitRequest, ChatMessage, ChatMessageRequest, HealthResponse, NotePayload, PublicChatbotRequest, PublicChatbotResponse, ScoreCreateRequest, SupportMessageRequest
 from app.prompts.coach import build_coach_prompt
 from app.rag.knowledge import retrieve_knowledge_context
 from app.repositories.adherent_repository import AdherentRepository
@@ -33,6 +33,57 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     return HealthResponse(status="ok", service=settings.service_name)
+
+
+@app.post("/public/chatbot-rdv/chat", response_model=PublicChatbotResponse)
+async def public_chatbot_rdv_chat(payload: PublicChatbotRequest) -> PublicChatbotResponse:
+    user_content = payload.content.strip()
+    if not user_content:
+        raise HTTPException(status_code=400, detail="Message content cannot be empty")
+
+    logger.info("public chatbot request page_url=%s", payload.page_url or "")
+
+    contextual_message = f"""
+Tu es le chatbot public de Deep Training For TOEIC.
+Ta mission est d'aider les visiteurs a comprendre rapidement la plateforme et a prendre rendez-vous.
+Deep Training For TOEIC est un systeme structure de preparation TOEIC avec programme, ressources, suivi, discipline, Coach IA et accompagnement vers un score cible.
+Tu dois repondre en francais simple, court, professionnel et oriente action.
+Tu ne dois pas faire de longs cours TOEIC.
+Tu ne dois pas remplacer le Coach IA adherent.
+Tu dois surtout :
+- comprendre le besoin du visiteur
+- expliquer rapidement la valeur de la plateforme
+- poser au maximum une question utile
+- orienter vers la prise de rendez-vous
+- inviter a cliquer sur le bouton de rendez-vous
+Ne donne pas de prix precis si la plateforme dit que le tarif est donne apres analyse du projet.
+Ne promets pas un score garanti.
+Reponds sans markdown lourd.
+
+Contexte visiteur :
+- page_url : {payload.page_url or ""}
+- visitor_context : {payload.visitor_context or {}}
+
+Message visiteur :
+{user_content}
+"""
+
+    try:
+        ai_text = await call_ai_gateway(
+            message=contextual_message,
+            response_mode="fast",
+            temperature=0.3,
+        )
+    except AIGatewayError as exc:
+        logger.warning("public chatbot ai_gateway error")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return PublicChatbotResponse(
+        content=ai_text,
+        should_book_call=True,
+        cta_label="Prendre rendez-vous",
+        cta_url=settings.calendly_url,
+    )
 
 
 @app.get("/adherent/me")

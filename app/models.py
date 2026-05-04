@@ -44,6 +44,19 @@ class AdherentProfileInitRequest(BaseModel):
     mainMotivation: str = Field(min_length=1, max_length=500)
 
 
+class PublicChatbotRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+    page_url: str | None = None
+    visitor_context: dict | None = None
+
+
+class PublicChatbotResponse(BaseModel):
+    content: str
+    should_book_call: bool
+    cta_label: str
+    cta_url: str
+
+
 class ChatMessage(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

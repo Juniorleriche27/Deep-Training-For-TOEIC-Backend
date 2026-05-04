@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     ai_gateway_api_key: str = Field(default="", alias="AI_GATEWAY_API_KEY")
     ai_gateway_timeout_seconds: int = Field(default=120, alias="AI_GATEWAY_TIMEOUT_SECONDS")
     ai_default_response_mode: str = Field(default="fast", alias="AI_DEFAULT_RESPONSE_MODE")
+    calendly_url: str = Field(default="", alias="CALENDLY_URL")
 
     supabase_url: str = Field(default="", alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(default="", alias="SUPABASE_SERVICE_ROLE_KEY")
