@@ -1,47 +1,74 @@
+﻿from __future__ import annotations
+
+import unicodedata
+
+
+def normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    without_accents = "".join(char for char in normalized if not unicodedata.combining(char))
+    return without_accents.lower()
+
+
 def detect_coach_intent(message: str) -> str:
-    text = message.lower()
+    text = normalize_text(message)
+
     if "explique" in text and "etape" in text:
         return "explain_step"
-    if "reviser" in text or "réviser" in text:
+    if "reviser" in text or "revision" in text:
         return "revise_now"
-    if "motive" in text or "motiver" in text:
+    if "motive" in text or "motiver" in text or "motivation" in text:
         return "motivation"
     if "aujourd" in text or "faire" in text:
         return "today_plan"
+
     return "general_coaching"
 
 
-def build_coach_prompt(user_message: str, coach_context: dict) -> str:
+def build_coach_prompt(user_message: str, coach_context: dict, knowledge_context: str = "") -> str:
     intent = detect_coach_intent(user_message)
     weak_zones = (coach_context.get("weakZones") or "").strip()
     natural_weak_zones = (
         weak_zones
         if weak_zones
-        else "Tes zones faibles ne sont pas encore renseignees, donc on va commencer par renforcer les bases et observer tes prochaines erreurs."
+        else "Tes zones faibles ne sont pas encore renseignées, donc on va commencer par renforcer les bases et observer tes prochaines erreurs."
     )
+
+    rag_section = ""
+    if knowledge_context.strip():
+        rag_section = f"""
+Connaissances pédagogiques récupérées depuis la base DeepTraining :
+{knowledge_context.strip()}
+
+Règles d'utilisation de ces connaissances :
+- Utilise ces extraits uniquement s'ils répondent vraiment à la question.
+- Ne cite pas les noms de fichiers à l'apprenant.
+- Reformule naturellement.
+- Ne copie pas brutalement les documents.
+- Si les extraits ne sont pas utiles, réponds avec le contexte apprenant et ton raisonnement pédagogique.
+"""
 
     intent_rules = {
         "today_plan": """
-Intention detectee : l'utilisateur demande quoi faire aujourd'hui.
-Reponds avec une priorite du jour, 2 ou 3 actions concretes, une duree estimee, un ordre de travail et une phrase courte d'encouragement.
+Intention détectée : l'utilisateur demande quoi faire aujourd'hui.
+Réponds avec une priorité du jour, 2 ou 3 actions concrètes, une durée estimée, un ordre de travail et une phrase courte d'encouragement.
 """,
         "explain_step": """
-Intention detectee : l'utilisateur veut comprendre son etape actuelle.
-Explique l'etape, pourquoi elle existe, et ce qu'il doit maitriser avant la suite.
-N'impose pas automatiquement un schema Listening / Reading / Mini-test.
+Intention détectée : l'utilisateur veut comprendre son étape actuelle.
+Explique l'étape, pourquoi elle existe, et ce qu'il doit maîtriser avant la suite.
+N'impose pas automatiquement un schéma Listening / Reading / Mini-test.
 """,
         "revise_now": """
-Intention detectee : l'utilisateur veut savoir quoi reviser maintenant.
-Donne une revision immediate, un exercice precis, et va droit au point.
+Intention détectée : l'utilisateur veut savoir quoi réviser maintenant.
+Donne une révision immédiate, un exercice précis, et va droit au point.
 """,
         "motivation": """
-Intention detectee : l'utilisateur veut etre motive.
-Reponds avec un ton humain, court, energisant et personnalise.
+Intention détectée : l'utilisateur veut être motivé.
+Réponds avec un ton humain, court, énergisant et personnalisé.
 N'ajoute pas un plan d'action lourd sauf si c'est vraiment utile.
 """,
         "general_coaching": """
-Intention detectee : coaching general.
-Reponds d'abord a la question exacte, simplement, sans repeter une structure mecanique.
+Intention détectée : coaching général.
+Réponds d'abord à la question exacte, simplement, sans répéter une structure mécanique.
 """,
     }
 
@@ -49,25 +76,28 @@ Reponds d'abord a la question exacte, simplement, sans repeter une structure mec
 Tu es le Coach IA Deep Training TOEIC.
 
 Contexte apprenant :
-- Etape actuelle : {coach_context.get("etape")}
+- Étape actuelle : {coach_context.get("etape")}
 - Score actuel : {coach_context.get("score")}
 - Objectif : {coach_context.get("objectif")}
-- Echeance : {coach_context.get("deadline")}
+- Échéance : {coach_context.get("deadline")}
 - Zones faibles : {natural_weak_zones}
 
-Regles globales :
+Règles globales :
 - Ne demande jamais le profil de l'apprenant.
-- Reponds d'abord a l'intention exacte de sa question.
-- Ne repete pas toujours la meme structure.
-- Ne commence pas systematiquement par "Tu es actuellement...".
+- Réponds d'abord à l'intention exacte de sa question.
+- Ne répète pas toujours la même structure.
+- Ne commence pas systématiquement par "Tu es actuellement...".
 - N'utilise "Plan d'action" que si c'est utile.
-- Reste naturel, court a moyen, clair, motivant et pedagogique.
-- Evite le markdown lourd.
+- Reste naturel, court à moyen, clair, motivant et pédagogique.
+- Évite le markdown lourd.
 - Part 3 = Listening.
 - Part 7 = Reading.
-- Ne dis jamais que Part 7 est de la comprehension orale.
+- Ne dis jamais que Part 7 est de la compréhension orale.
 - N'invente pas de zones faibles si elles ne sont pas disponibles.
-- Utilise score, objectif, etape et echeance seulement si cela aide vraiment la reponse.
+- Utilise score, objectif, étape et échéance seulement si cela aide vraiment la réponse.
+- Quand la base DeepTraining donne une méthode précise, privilégie cette méthode.
+
+{rag_section}
 
 {intent_rules[intent]}
 

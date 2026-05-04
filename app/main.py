@@ -7,6 +7,7 @@ from app.config import get_cors_origins, get_settings
 from app.dependencies.auth import get_current_profile_id
 from app.models import AdherentProfileInitRequest, ChatMessage, ChatMessageRequest, HealthResponse, NotePayload, ScoreCreateRequest, SupportMessageRequest
 from app.prompts.coach import build_coach_prompt
+from app.rag.knowledge import retrieve_knowledge_context
 from app.repositories.adherent_repository import AdherentRepository
 from app.services.ai_gateway import AIGatewayError, call_ai_gateway
 
@@ -127,9 +128,13 @@ async def get_chat_history(profile_id: str = Depends(get_current_profile_id)):
 @app.post("/adherent/coach-ia/chat", response_model=ChatMessage, status_code=201)
 async def create_chat_message(payload: ChatMessageRequest, profile_id: str = Depends(get_current_profile_id)) -> ChatMessage:
     try:
-        repository.persist_chat_message(profile_id, "user", payload.content.strip())
+        user_content = payload.content.strip()
+        repository.persist_chat_message(profile_id, "user", user_content)
+
         coach_context = repository.get_coach_context(profile_id)
-        contextual_message = build_coach_prompt(payload.content, coach_context)
+        knowledge_context = await retrieve_knowledge_context(user_content)
+        contextual_message = build_coach_prompt(user_content, coach_context, knowledge_context)
+
         ai_text = await call_ai_gateway(
             message=contextual_message,
             response_mode=payload.response_mode,
