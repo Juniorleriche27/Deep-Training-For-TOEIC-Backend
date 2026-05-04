@@ -32,6 +32,18 @@ class SupportMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
 
 
+class AdherentProfileInitRequest(BaseModel):
+    firstName: str = Field(min_length=1, max_length=120)
+    lastName: str = Field(min_length=1, max_length=120)
+    currentScore: int = Field(ge=0, le=990)
+    targetScore: int = Field(ge=10, le=990)
+    toeicDate: str = Field(min_length=10, max_length=10)
+    status: Literal["student", "professional", "other"]
+    studyLevel: str = Field(min_length=1, max_length=120)
+    profession: str = Field(min_length=1, max_length=160)
+    mainMotivation: str = Field(min_length=1, max_length=500)
+
+
 class ChatMessage(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -56,3 +68,5 @@ class AdherentUser(BaseModel):
     currentStep: int
     currentStepLabel: str
     deadline: str
+    profileCompleted: bool | None = None
+    onboardingCompleted: bool | None = None

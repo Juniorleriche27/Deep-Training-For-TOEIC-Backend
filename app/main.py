@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_cors_origins, get_settings
 from app.dependencies.auth import get_current_profile_id
-from app.models import ChatMessage, ChatMessageRequest, HealthResponse, NotePayload, ScoreCreateRequest, SupportMessageRequest
+from app.models import AdherentProfileInitRequest, ChatMessage, ChatMessageRequest, HealthResponse, NotePayload, ScoreCreateRequest, SupportMessageRequest
 from app.repositories.adherent_repository import AdherentRepository
 from app.services.ai_gateway import AIGatewayError, call_ai_gateway
 
@@ -36,6 +36,11 @@ async def health() -> HealthResponse:
 @app.get("/adherent/me")
 async def get_me(profile_id: str = Depends(get_current_profile_id)):
     return repository.get_me(profile_id)
+
+
+@app.post("/adherent/profil/init")
+async def init_profile(payload: AdherentProfileInitRequest, profile_id: str = Depends(get_current_profile_id)):
+    return repository.init_profile(profile_id, payload.model_dump())
 
 
 @app.get("/adherent/dashboard")

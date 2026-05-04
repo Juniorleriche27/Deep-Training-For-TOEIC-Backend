@@ -18,7 +18,7 @@ class AdherentRepository:
             row = (
                 get_app_schema_client()
                 .from_("profiles")
-                .select("id, full_name, avatar, current_step, current_step_label, deadline_label")
+                .select("id, full_name, avatar, current_step, current_step_label, deadline_label, toeic_date, profile_completed, onboarding_completed")
                 .eq("id", profile_id)
                 .limit(1)
                 .execute()
@@ -30,10 +30,96 @@ class AdherentRepository:
                 "avatar": data["avatar"],
                 "currentStep": data["current_step"],
                 "currentStepLabel": data["current_step_label"],
-                "deadline": data["deadline_label"],
+                "deadline": self._resolve_deadline_label(data.get("toeic_date"), data["deadline_label"]),
+                "profileCompleted": bool(data.get("profile_completed")),
+                "onboardingCompleted": bool(data.get("onboarding_completed")),
             }
 
-        return self._with_fallback("get_me", operation, ADHERENT_USER.model_dump())
+        return self._with_fallback(
+            "get_me",
+            operation,
+            {
+                **ADHERENT_USER.model_dump(),
+                "profileCompleted": False,
+                "onboardingCompleted": False,
+            },
+        )
+
+    def init_profile(self, profile_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        def operation():
+            schema = get_app_schema_client()
+            full_name = f"{payload['firstName'].strip()} {payload['lastName'].strip()}".strip()
+            listening_score, reading_score = self._split_total_score(payload["currentScore"])
+
+            updated = (
+                schema.from_("profiles")
+                .update(
+                    {
+                        "first_name": payload["firstName"].strip(),
+                        "last_name": payload["lastName"].strip(),
+                        "full_name": full_name,
+                        "target_score": payload["targetScore"],
+                        "toeic_date": payload["toeicDate"],
+                        "deadline_label": self._deadline_label_from_date(payload["toeicDate"]),
+                        "status": payload["status"],
+                        "study_level": payload["studyLevel"].strip(),
+                        "profession": payload["profession"].strip(),
+                        "main_motivation": payload["mainMotivation"].strip(),
+                        "profile_completed": True,
+                        "onboarding_completed": True,
+                        "start_score": payload["currentScore"],
+                        "current_score": payload["currentScore"],
+                        "listening_score": listening_score,
+                        "reading_score": reading_score,
+                    }
+                )
+                .eq("id", profile_id)
+                .execute()
+            )
+            self._single(updated.data, "profile")
+
+            current_rows = (
+                schema.from_("score_entries")
+                .select("id")
+                .eq("profile_id", profile_id)
+                .eq("is_current", True)
+                .limit(1)
+                .execute()
+            ).data or []
+            schema.from_("score_entries").update({"is_current": False}).eq("profile_id", profile_id).execute()
+            initial_score_payload = {
+                "profile_id": profile_id,
+                "taken_on": datetime.now(tz=timezone.utc).date().isoformat(),
+                "listening": listening_score,
+                "reading": reading_score,
+                "format_label": "Initial",
+                "is_current": True,
+            }
+            if current_rows:
+                schema.from_("score_entries").update(initial_score_payload).eq("id", current_rows[0]["id"]).execute()
+            else:
+                schema.from_("score_entries").insert(initial_score_payload).execute()
+
+            return {
+                "profile": self.get_me(profile_id),
+                "dashboard": self.get_dashboard(profile_id),
+                "coachContext": self.get_coach_context(profile_id),
+            }
+
+        return self._with_fallback_write(
+            "init_profile",
+            operation,
+            {
+                "profile": {
+                    **self.get_me(profile_id),
+                    "name": f"{payload['firstName'].strip()} {payload['lastName'].strip()}".strip(),
+                    "profileCompleted": True,
+                    "onboardingCompleted": True,
+                },
+                "dashboard": self._fallback_dashboard_after_init(payload),
+                "coachContext": self._fallback_coach_context_after_init(payload),
+            },
+        )
 
     def get_dashboard(self, profile_id: str) -> dict[str, Any]:
         def operation():
@@ -500,7 +586,7 @@ class AdherentRepository:
             row = (
                 get_app_schema_client()
                 .from_("profiles")
-                .select("current_step, current_step_label, current_score, target_score, deadline_label, weak_zones")
+                .select("current_step, current_step_label, current_score, target_score, deadline_label, toeic_date, weak_zones")
                 .eq("id", profile_id)
                 .limit(1)
                 .execute()
@@ -510,7 +596,7 @@ class AdherentRepository:
                 "etape": self._step_name_from_profile(data["current_step"], data["current_step_label"]),
                 "score": data["current_score"],
                 "objectif": data["target_score"],
-                "deadline": data["deadline_label"].replace("TOEIC dans ", "J-").replace(" jours", ""),
+                "deadline": self._resolve_deadline_label(data.get("toeic_date"), data["deadline_label"]).replace("TOEIC le ", ""),
                 "weakZones": data["weak_zones"],
             }
 
@@ -614,6 +700,43 @@ class AdherentRepository:
         return value.replace("T", " ")[:16]
 
     @staticmethod
+    def _split_total_score(total_score: int) -> tuple[int, int]:
+        listening = max(0, min(495, ((total_score // 2) // 5) * 5))
+        reading = max(0, min(495, total_score - listening))
+        reading = ((reading + 2) // 5) * 5
+        diff = total_score - (listening + reading)
+        reading += diff
+        if reading > 495:
+            overflow = reading - 495
+            reading = 495
+            listening = max(0, listening - overflow)
+        if listening > 495:
+            overflow = listening - 495
+            listening = 495
+            reading = max(0, reading - overflow)
+        return listening, reading
+
+    @staticmethod
+    def _deadline_label_from_date(toeic_date: str) -> str:
+        try:
+            target = datetime.fromisoformat(toeic_date).date()
+        except ValueError:
+            return f"TOEIC le {toeic_date}"
+        today = datetime.now(tz=timezone.utc).date()
+        delta = (target - today).days
+        if delta > 0:
+            return f"J-{delta}"
+        if delta == 0:
+            return "Aujourd'hui"
+        return f"TOEIC le {toeic_date}"
+
+    @classmethod
+    def _resolve_deadline_label(cls, toeic_date: str | None, deadline_label: str) -> str:
+        if toeic_date:
+            return cls._deadline_label_from_date(toeic_date)
+        return deadline_label
+
+    @staticmethod
     def _compute_progression_percent(progression: list[dict[str, Any]]) -> int:
         if not progression:
             return 0
@@ -712,7 +835,7 @@ class AdherentRepository:
         message = {
             "id": f"msg-{int(datetime.now(tz=timezone.utc).timestamp() * 1000)}",
             "sender": "Adherent",
-            "senderAvatar": self.get_me()["avatar"],
+            "senderAvatar": ADHERENT_USER.avatar,
             "time": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
             "read": False,
             "content": content,
@@ -720,6 +843,25 @@ class AdherentRepository:
         }
         MESSAGES.insert(0, message)
         return message
+
+    def _fallback_dashboard_after_init(self, payload: dict[str, Any]) -> dict[str, Any]:
+        listening, reading = self._split_total_score(payload["currentScore"])
+        return {
+            **DASHBOARD_DATA,
+            "score": payload["currentScore"],
+            "scoreStart": payload["currentScore"],
+            "scoreObjectif": payload["targetScore"],
+            "listening": listening,
+            "reading": reading,
+        }
+
+    def _fallback_coach_context_after_init(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **COACH_CONTEXT.model_dump(),
+            "score": payload["currentScore"],
+            "objectif": payload["targetScore"],
+            "deadline": self._deadline_label_from_date(payload["toeicDate"]).replace("TOEIC le ", ""),
+        }
 
     @staticmethod
     def _fallback_mark_message_read(message_id: str) -> dict[str, Any]:

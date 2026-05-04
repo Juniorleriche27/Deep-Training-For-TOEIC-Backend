@@ -25,13 +25,23 @@ as $$
 begin
   insert into app.profiles (
     auth_user_id,
+    email,
     role,
+    first_name,
+    last_name,
     full_name,
     avatar,
     current_step,
     current_step_label,
     deadline_label,
     target_score,
+    toeic_date,
+    status,
+    study_level,
+    profession,
+    main_motivation,
+    profile_completed,
+    onboarding_completed,
     start_score,
     current_score,
     listening_score,
@@ -46,7 +56,10 @@ begin
   )
   values (
     new.id,
+    new.email,
     'adherent',
+    coalesce(nullif(trim(new.raw_user_meta_data->>'first_name'), ''), ''),
+    coalesce(nullif(trim(new.raw_user_meta_data->>'last_name'), ''), ''),
     coalesce(
       nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
       nullif(trim(new.email), ''),
@@ -57,6 +70,13 @@ begin
     'Etape 1',
     '',
     785,
+    null,
+    'other',
+    '',
+    '',
+    '',
+    false,
+    false,
     0,
     0,
     0,
@@ -78,13 +98,23 @@ $$;
 create table if not exists app.profiles (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid unique,
+  email text,
   role text not null default 'adherent' check (role in ('adherent', 'admin', 'coach')),
+  first_name text not null default '',
+  last_name text not null default '',
   full_name text not null,
   avatar text not null default 'AS',
   current_step integer not null default 1 check (current_step between 1 and 5),
   current_step_label text not null default 'Etape 1',
   deadline_label text not null default '',
   target_score integer not null default 785 check (target_score between 10 and 990),
+  toeic_date date,
+  status text not null default 'other' check (status in ('student', 'professional', 'other')),
+  study_level text not null default '',
+  profession text not null default '',
+  main_motivation text not null default '',
+  profile_completed boolean not null default false,
+  onboarding_completed boolean not null default false,
   start_score integer not null default 0 check (start_score between 0 and 990),
   current_score integer not null default 0 check (current_score between 0 and 990),
   listening_score integer not null default 0 check (listening_score between 0 and 495),
@@ -99,6 +129,19 @@ create table if not exists app.profiles (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table app.profiles add column if not exists email text;
+alter table app.profiles add column if not exists first_name text not null default '';
+alter table app.profiles add column if not exists last_name text not null default '';
+alter table app.profiles add column if not exists toeic_date date;
+alter table app.profiles add column if not exists status text not null default 'other';
+alter table app.profiles add column if not exists study_level text not null default '';
+alter table app.profiles add column if not exists profession text not null default '';
+alter table app.profiles add column if not exists main_motivation text not null default '';
+alter table app.profiles add column if not exists profile_completed boolean not null default false;
+alter table app.profiles add column if not exists onboarding_completed boolean not null default false;
+alter table app.profiles drop constraint if exists profiles_status_check;
+alter table app.profiles add constraint profiles_status_check check (status in ('student', 'professional', 'other'));
 
 create table if not exists app.program_steps (
   id uuid primary key default gen_random_uuid(),
@@ -472,13 +515,23 @@ for each row execute function app.set_updated_at();
 insert into app.profiles (
   id,
   auth_user_id,
+  email,
   role,
+  first_name,
+  last_name,
   full_name,
   avatar,
   current_step,
   current_step_label,
   deadline_label,
   target_score,
+  toeic_date,
+  status,
+  study_level,
+  profession,
+  main_motivation,
+  profile_completed,
+  onboarding_completed,
   start_score,
   current_score,
   listening_score,
@@ -493,13 +546,23 @@ insert into app.profiles (
 values (
   '11111111-1111-1111-1111-111111111111',
   null,
+  'amina@example.com',
   'adherent',
+  'Amina',
+  'S.',
   'Amina S.',
   'AS',
   2,
   'Etape 2',
   'TOEIC dans 18 jours',
   785,
+  '2026-05-21',
+  'student',
+  'Intermediaire',
+  'Etudiante',
+  'Ameliorer rapidement mon score TOEIC',
+  true,
+  true,
   520,
   615,
   325,
@@ -512,12 +575,22 @@ values (
   'Stabilise la prise de notes en Listening avant d''augmenter le volume de tests blancs.'
 )
 on conflict (id) do update set
+  email = excluded.email,
+  first_name = excluded.first_name,
+  last_name = excluded.last_name,
   full_name = excluded.full_name,
   avatar = excluded.avatar,
   current_step = excluded.current_step,
   current_step_label = excluded.current_step_label,
   deadline_label = excluded.deadline_label,
   target_score = excluded.target_score,
+  toeic_date = excluded.toeic_date,
+  status = excluded.status,
+  study_level = excluded.study_level,
+  profession = excluded.profession,
+  main_motivation = excluded.main_motivation,
+  profile_completed = excluded.profile_completed,
+  onboarding_completed = excluded.onboarding_completed,
   start_score = excluded.start_score,
   current_score = excluded.current_score,
   listening_score = excluded.listening_score,
@@ -687,13 +760,22 @@ create or replace view app.v_adherent_dashboard as
 select
   p.id as profile_id,
   p.full_name,
+  p.first_name,
+  p.last_name,
   p.avatar,
   p.current_step,
   p.current_step_label,
   p.deadline_label,
+  p.toeic_date,
   p.start_score,
   p.current_score,
   p.target_score,
+  p.status,
+  p.study_level,
+  p.profession,
+  p.main_motivation,
+  p.profile_completed,
+  p.onboarding_completed,
   p.listening_score,
   p.reading_score,
   p.regularity_percent,
