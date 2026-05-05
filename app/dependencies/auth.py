@@ -26,18 +26,16 @@ def get_current_profile_id(authorization: str | None = Header(default=None)) -> 
             return get_user_profile_id_from_access_token(token.strip())
         except (SupabaseNotConfiguredError, LookupError, ValueError) as exc:
             logger.warning("auth failed for bearer token: %s", exc)
-            if not settings.allow_default_profile_fallback:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Unauthorized",
-                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+            ) from exc
         except Exception as exc:
             logger.exception("unexpected auth resolution error: %s", exc)
-            if not settings.allow_default_profile_fallback:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Unauthorized",
-                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized",
+            ) from exc
 
     if settings.allow_default_profile_fallback:
         return settings.default_profile_id
