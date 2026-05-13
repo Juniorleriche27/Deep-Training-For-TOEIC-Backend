@@ -61,6 +61,19 @@ Ce script cree :
 - les triggers `updated_at`
 - un jeu de donnees seed minimal coherent avec le frontend actuel
 
+## Keepalive Supabase
+
+Le workflow GitHub Actions `.github/workflows/supabase-keepalive.yml` ping le projet Supabase Deep Training For TOEIC toutes les 12 heures pour eviter une mise en pause automatique.
+
+Secrets GitHub requis dans ce repo uniquement :
+
+```env
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+```
+
+Le workflow interroge `app.profiles` via l'API REST Supabase avec le header `Accept-Profile: app`. Il peut aussi etre lance manuellement depuis l'onglet Actions.
+
 ## AI Gateway
 
 Le backend n'appelle jamais Ollama directement.
